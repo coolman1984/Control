@@ -56,6 +56,16 @@ def test_fix_apply_journals_undo_and_confirms(area):
     assert undo_payload["ok"] and "undone J-junk.temp.clean" in text
 
 
+def test_fix_apply_not_reversible_is_not_journaled_as_undoable(area):
+    payload, _ = runner.execute("sys.fix", {"ids": ["junk.cache.clean"], "apply": True})
+    assert payload["ok"]
+    from control import journal
+    e = journal.default().get(payload["journal_id"])
+    assert e["undo"] is None or e["undo"] == []
+    with pytest.raises(Exception):
+        runner.undo(payload["journal_id"])
+
+
 def test_slow_area_startup_times_out_and_kills_child(clean_registry):
     from control.areas import sys as sys_area
     from control.errors import ControlError

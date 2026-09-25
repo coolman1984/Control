@@ -66,7 +66,7 @@ def _handler(child, name, cfg):
             outs = data.get("outcomes") or []
             payload["ok"] = not any(o.get("error") for o in outs)
             steps = [{"action": "sys.undo", "args": {"id": o["journal_id"]}}
-                     for o in outs if o.get("journal_id") and not o.get("dry_run")]
+                     for o in outs if o.get("journal_id") and not o.get("dry_run") and o.get("reversible")]
             if steps:
                 payload["_undo"] = steps
         return payload, text

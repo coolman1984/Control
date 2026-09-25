@@ -6,10 +6,11 @@ import time
 
 SLOW_START = "--slow-start" in sys.argv[1:]
 
-FIXES = [{"id": "junk.temp.clean", "risk": "safe", "needs_admin": False},
-         {"id": "junk.old.delete", "risk": "risky", "needs_admin": False},
-         {"id": "junk.admin.clean", "risk": "safe", "needs_admin": True},
-         {"id": "tweaks.x.apply", "risk": "moderate", "needs_admin": False}]
+FIXES = [{"id": "junk.temp.clean", "risk": "safe", "needs_admin": False, "reversible": True},
+         {"id": "junk.old.delete", "risk": "risky", "needs_admin": False, "reversible": False},
+         {"id": "junk.admin.clean", "risk": "safe", "needs_admin": True, "reversible": False},
+         {"id": "junk.cache.clean", "risk": "safe", "needs_admin": False, "reversible": False},
+         {"id": "tweaks.x.apply", "risk": "moderate", "needs_admin": False, "reversible": True}]
 FIX_IDS = [f["id"] for f in FIXES]
 TOOLS = [{"name": "health", "description": "disk health", "inputSchema": {"type": "object", "properties": {}}},
          {"name": "junk", "description": "junk files", "inputSchema": {"type": "object", "properties": {}}},
@@ -59,8 +60,10 @@ for line in sys.stdin:
                                 "error": f"no fix matches {pattern!r}"})
                     continue
                 for fid in matched:
+                    reversible = next(f["reversible"] for f in FIXES if f["id"] == fid)
                     outs.append({"fix_id": fid, "dry_run": not apply, "ok": True,
                                 "journal_id": "J-" + fid if apply else "",
+                                "reversible": reversible,
                                 "confirm_risky": a.get("confirm_risky", False)})
             reply(msg["id"], text("fixed", {"outcomes": outs}))
         elif n == "clean":

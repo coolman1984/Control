@@ -21,15 +21,16 @@ import (
 
 // Outcome describes what applying a fix did (or would do).
 type Outcome struct {
-	FixID     string   `json:"fix_id"`
-	Title     string   `json:"title"`
-	DryRun    bool     `json:"dry_run"`
-	OK        bool     `json:"ok"`
-	Freed     int64    `json:"freed_bytes,omitempty"`
-	Plan      []string `json:"plan"`
-	Output    string   `json:"output,omitempty"`
-	Error     string   `json:"error,omitempty"`
-	JournalID string   `json:"journal_id,omitempty"`
+	FixID      string   `json:"fix_id"`
+	Title      string   `json:"title"`
+	DryRun     bool     `json:"dry_run"`
+	OK         bool     `json:"ok"`
+	Freed      int64    `json:"freed_bytes,omitempty"`
+	Plan       []string `json:"plan"`
+	Output     string   `json:"output,omitempty"`
+	Error      string   `json:"error,omitempty"`
+	JournalID  string   `json:"journal_id,omitempty"`
+	Reversible bool     `json:"reversible,omitempty"`
 }
 
 // ErrNeedsAdmin is returned when a fix requires elevation.
@@ -120,6 +121,7 @@ func Apply(ctx context.Context, fx *core.Fix, dry bool, progress func(string)) O
 	entry.OK, entry.Freed = o.OK, o.Freed
 	if jerr := appendJournal(entry); jerr == nil {
 		o.JournalID = entry.ID
+		o.Reversible = entry.Reversible()
 	}
 	return o
 }
