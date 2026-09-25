@@ -43,7 +43,7 @@ class Server:
 
     def _visible(self):
         return [a for n, a in registry.ACTIONS.items()
-                if a.area == "control" or n in CORE_EXTRAS or a.area in self.loaded]
+                if a.area in ("control", "flow", "run") or n in CORE_EXTRAS or a.area in self.loaded]
 
     @staticmethod
     def _tool(a):

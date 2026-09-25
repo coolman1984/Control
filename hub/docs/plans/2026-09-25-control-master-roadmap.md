@@ -79,9 +79,38 @@ Design stance taken from this: **deterministic robot layer + agent layer on top*
 - **Run store**: one SQLite DB `%LOCALAPPDATA%\Control\control.db` (WAL) — runs, steps, checkpoints, queues, trigger state, approvals. Journal JSONL stays as the append-only audit trail.
 - **Everything still goes through `runner.execute`** — flows get no side door around tiers, journal or approval.
 
-### 2.2 Piece 2 — Flow engine (durable execution) 🔴
+### 2.2 Piece 2 — Flow engine (durable execution) 🔴 ✅ first version built (2026-09-25)
 
-- **Flow format**: YAML (primary, diff-able, agent-writable) + optional Python flows for logic. Steps = any Control action, plus `if`, `for_each`, `parallel` (bounded), `call_flow`, `wait_for`, `ask_human`, `set`, `assert`.
+Owner decisions locked in: this runs on the owner's own PC (Windows-only), and risky-step
+approval stays on-screen only (no phone approval channel) — piece 4's kill switch/vault follow
+that same "screen only" line.
+
+Built as `control/flow/` (`model.py`, `expr.py`, `engine.py`) + `control/store.py` (the run/
+approval/lock store) + `control/areas/flow.py` (`flow.*`/`run.*` actions), with
+`hub/tests/test_flow_*.py` + `test_store.py` + `test_area_flow.py`. One deliberate change from
+this plan as first written: flows are **TOML, not YAML** — piece 1's Global Constraints keep
+`control/` stdlib-only, and Python ships `tomllib` but no YAML reader; TOML's array-of-tables
+syntax nests `if`/`for_each`/`parallel` cleanly (verified before committing to it). See
+"Flows" in `docs/PLAYBOOK.md` for the owner-facing how-to and a worked example.
+
+Delivered: `if`/`for_each`/`parallel`/`wait_for`/`ask_human`/`call_flow`/`set`/`assert` step
+types; per-step retry with backoff and a retryable-code list; `for_each` keeps going after one
+item fails and reports which; a flow-version approval (sha256 of the file) that once granted lets
+every risky step inside run unattended until the file changes; crash/resume semantics (a step
+found `started` with no `done`/`failed` after it means the process died — resumed automatically
+only if `idempotent = true`, otherwise the run stops at `needs_attention` for `run.retry_step`);
+a per-flow single-flight lock (`concurrency = "single"`, the default) so two runs of the same flow
+never fight each other; a process-wide lock serialising real mouse/keyboard actions across
+concurrently-running flows; `wait_for` refuses to poll a non-read action so it can't spam the
+approval box or repeat a side effect; `flow.dry_run` previews without side effects, resolving
+what it can and noting where it can't.
+
+Known, documented v1 limits (fast-follows once a real flow needs them): `ask_human`/`wait_for`
+may only be top-level steps (rejected by `flow.validate` if nested) — a pause has to be somewhere
+resumable; `if`/`for_each` run their nested steps as one all-or-nothing unit, so a crash inside one
+goes to `needs_attention` rather than resuming mid-loop; `call_flow` cannot call a sub-flow that
+pauses (`CALL_FLOW_WAITING`); `for_each` items are a flat list processed sequentially (no queue
+table yet — piece 3's per-item retry API is a natural extension once triggers need it).
 - **Expressions**: small safe expression language (no `eval`): `{{steps.report.manifest.files[0]}}`, `{{secret:gmes}}`, `{{input.date}}`.
 - **Durability** (DBOS-style, embedded, no server): each step's input/output recorded before continuing; on restart, completed steps are replayed from the store, not re-executed. Each step declares `idempotent` or an `idempotency_key`; non-idempotent step interrupted mid-flight → run goes to `needs_attention`, never auto-retried.
 - **Retries**: per-step policy (attempts, backoff, retry-on codes list); `GMES_BUSY`/`TIMEOUT`/`APP_HUNG` retryable by default, `APPROVAL_DENIED` never.

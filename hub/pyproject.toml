@@ -16,7 +16,7 @@ dev = ["pytest>=8"]
 control = "control.cli:main"
 
 [tool.setuptools]
-packages = ["control", "control.areas"]
+packages = ["control", "control.areas", "control.flow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
