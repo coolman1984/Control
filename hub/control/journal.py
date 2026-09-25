@@ -24,10 +24,13 @@ def _is_free_text_action(action):
     return action is not None and (action.endswith(".type") or action in ("win.clipboard", "win.press"))
 
 
-def mask(args, action=None):
+def mask(args, action=None, force_keys=()):
     """Recursively mask secret-looking keys at any depth. For actions that type or move raw
     keystrokes/clipboard text (name ending .type, or win.clipboard / win.press), also replace the
-    free-text value itself - not just secret-named keys - so it never reaches the journal."""
+    free-text value itself - not just secret-named keys - so it never reaches the journal.
+    `force_keys` masks specific key names regardless of what they look like: the flow engine passes
+    the keys it just filled from the vault, so a `{{ secret:x }}` resolved into an oddly-named
+    argument is still never written to the journal in clear."""
     free_text = _is_free_text_action(action)
 
     def walk(value, key=None):
@@ -35,7 +38,7 @@ def mask(args, action=None):
             return {k: walk(v, k) for k, v in value.items()}
         if isinstance(value, list):
             return [walk(v, key) for v in value]
-        if key is not None and SECRET.search(str(key)):
+        if key is not None and (SECRET.search(str(key)) or key in force_keys):
             return "***"
         if free_text and key in FREE_TEXT_KEYS and isinstance(value, str):
             return _redact_value(value)
@@ -53,10 +56,10 @@ class Journal:
         with open(self.path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
-    def append(self, *, action, args, tier, approval, ok, code=None, ms=0, undo=None):
+    def append(self, *, action, args, tier, approval, ok, code=None, ms=0, undo=None, force_secret_keys=()):
         eid = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(3)
         self._write({"id": eid, "time": time.strftime("%Y-%m-%dT%H:%M:%S"), "action": action,
-                     "args": mask(args, action), "tier": tier, "approval": approval, "ok": ok,
+                     "args": mask(args, action, force_keys=force_secret_keys), "tier": tier, "approval": approval, "ok": ok,
                      "code": code, "ms": ms, "undo": undo,
                      "approval_off": os.environ.get("CONTROL_APPROVAL") == "off"})
         return eid

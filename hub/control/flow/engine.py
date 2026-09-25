@@ -13,14 +13,24 @@ Design choices (see docs/plans/2026-09-25-control-master-roadmap.md, piece 2):
   seconds would either spam the approval box or repeat a side effect.
 - `ask_human` and `wait_for` may not be nested inside `if`/`for_each`/`parallel` (enforced by
   `model.validate`): pausing only makes sense at a point the engine can actually resume from.
+- Taint tracking (piece 4): a step whose action is `untrusted_output=True` (its result carries a
+  web page, an e-mail, OCR text — content someone outside could have written) marks its own step
+  id as tainted. A later *risky* action step whose raw args mention `steps.<tainted id>` is run
+  with the flow's own pre-approval switched off for that one call, even inside an approved flow —
+  on an unattended box nobody is there to answer the resulting approval box, so it fails closed
+  (`APPROVAL_UNAVAILABLE`) instead of letting injected content silently reach a risky action. v1
+  scope: direct `action`/`parallel` step args only; a value that passes through `set` into `vars`,
+  or through `if`'s `that`/`for_each`'s `items`, is not tracked as tainted.
 """
+import re
 import secrets
 import threading
 import time
 
-from .. import registry, runner
+from .. import registry, runner, vault
 from ..errors import ControlError
 from . import expr
+from .expr import SecretRef
 from .model import parse as parse_flow
 
 _UI_LOCK = threading.Lock()
@@ -49,7 +59,79 @@ def _ui_gate(action_name, tier):
     return None
 
 
-def _call(action_name, args, execute, pre_approved):
+def _secret_key_names(value, names=None):
+    """Every top-level dict key, anywhere in this structure, whose value is (or contains) a
+    SecretRef - matches journal.mask()'s own key-name-at-any-depth semantics, so force_secret_keys
+    reliably hides it there even if the key itself doesn't look secret-shaped."""
+    names = set() if names is None else names
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if isinstance(v, SecretRef) or (isinstance(v, (dict, list)) and _contains_secret(v)):
+                names.add(k)
+            _secret_key_names(v, names)
+    elif isinstance(value, list):
+        for v in value:
+            _secret_key_names(v, names)
+    return names
+
+
+def _contains_secret(value):
+    if isinstance(value, SecretRef):
+        return True
+    if isinstance(value, dict):
+        return any(_contains_secret(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_secret(v) for v in value)
+    return False
+
+
+def _fill_secrets(value, *, preview):
+    """Replace every SecretRef with either a display placeholder (`preview=True`, used by
+    dry_run) or the real value from the vault (a real run) - the last thing that happens to a
+    step's arguments before they reach `execute()`."""
+    if isinstance(value, SecretRef):
+        return f"<secret:{value.name}>" if preview else vault.get_secret(value.name)
+    if isinstance(value, dict):
+        return {k: _fill_secrets(v, preview=preview) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_fill_secrets(v, preview=preview) for v in value]
+    return value
+
+
+_STEP_REF = re.compile(r"steps\.([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _tainted_sources(raw_value, tainted_ids):
+    """Which of `tainted_ids` this *unresolved* args structure's templates mention — scanned
+    before resolution, since resolving replaces `{{ steps.x... }}` with a plain value that no
+    longer says where it came from."""
+    if not tainted_ids:
+        return set()
+    found = set()
+
+    def walk(v):
+        if isinstance(v, str):
+            found.update(m.group(1) for m in _STEP_REF.finditer(v) if m.group(1) in tainted_ids)
+        elif isinstance(v, dict):
+            for vv in v.values():
+                walk(vv)
+        elif isinstance(v, list):
+            for vv in v:
+                walk(vv)
+
+    walk(raw_value)
+    return found
+
+
+def _mark_if_untrusted(ctx, step_id, action_name):
+    try:
+        if registry.get(action_name).untrusted_output:
+            ctx.setdefault("tainted", []).append(step_id)
+    except ControlError:
+        pass
+
+
+def _call(action_name, args, execute, pre_approved, force_secret_keys=()):
     try:
         action = registry.get(action_name)
         tier = action.tier_for(args)
@@ -58,19 +140,26 @@ def _call(action_name, args, execute, pre_approved):
     lock = _ui_gate(action_name, tier) if tier else None
     if lock:
         with lock:
-            return execute(action_name, args, pre_approved=pre_approved)
-    return execute(action_name, args, pre_approved=pre_approved)
+            return execute(action_name, args, pre_approved=pre_approved, force_secret_keys=force_secret_keys)
+    return execute(action_name, args, pre_approved=pre_approved, force_secret_keys=force_secret_keys)
 
 
 def _dispatch(step, ctx, store, run_id, idx, execute, dry_run, pre_approved, resolve_flow, answer):
     t = step.type
     if t == "action":
-        args = expr.resolve(step.get("args") or {}, ctx)
+        raw_args = step.get("args") or {}
+        resolved = expr.resolve(raw_args, ctx)
         if dry_run:
-            return {"ok": True, "_dry_run": True, "would_run": step.get("action"), "args": args}
-        payload, text = _call(step.get("action"), args, execute, pre_approved)
+            return {"ok": True, "_dry_run": True, "would_run": step.get("action"),
+                    "args": _fill_secrets(resolved, preview=True)}
+        secret_keys = _secret_key_names(resolved)
+        args = _fill_secrets(resolved, preview=False)
+        tainted = _tainted_sources(raw_args, set(ctx.get("tainted", [])))
+        payload, text = _call(step.get("action"), args, execute, pre_approved and not tainted,
+                               force_secret_keys=secret_keys)
         if not payload.get("ok", True):
             raise _StepFailed(payload.get("code", "STEP_FAILED"), text or payload.get("message", "step failed"))
+        _mark_if_untrusted(ctx, step.id, step.get("action"))
         return payload
 
     if t == "set":
@@ -105,11 +194,15 @@ def _dispatch(step, ctx, store, run_id, idx, execute, dry_run, pre_approved, res
         results, failures = [], []
         for i, item in enumerate(items):
             loop_ctx = {"input": ctx["input"], "steps": dict(ctx["steps"]),
-                        "vars": {**ctx["vars"], as_name: item, f"{as_name}_index": i}}
+                        "vars": {**ctx["vars"], as_name: item, f"{as_name}_index": i},
+                        "tainted": list(ctx.get("tainted", []))}
             try:
                 _run_nested(step.steps, loop_ctx, store, run_id, f"{idx}.{i}", execute, dry_run, pre_approved, resolve_flow)
                 results.append({"index": i, "ok": True})
                 ctx["steps"].update(loop_ctx["steps"])
+                for t_id in loop_ctx.get("tainted", []):
+                    if t_id not in ctx.get("tainted", []):
+                        ctx.setdefault("tainted", []).append(t_id)
             except _StepFailed as e:
                 failures.append({"index": i, "code": e.code, "error": e.text})
                 if stop_on_error:
@@ -126,19 +219,32 @@ def _dispatch(step, ctx, store, run_id, idx, execute, dry_run, pre_approved, res
         max_workers = step.get("max_workers") or len(actions) or 1
         resolved = [(a["id"], a["action"], expr.resolve(a.get("args") or {}, ctx)) for a in actions]
         if dry_run:
-            return {aid: {"ok": True, "_dry_run": True, "would_run": aname, "args": aargs}
+            return {aid: {"ok": True, "_dry_run": True, "would_run": aname, "args": _fill_secrets(aargs, preview=True)}
                     for aid, aname, aargs in resolved}
-        out, errs = {}, []
+        tainted_set = set(ctx.get("tainted", []))
+        out, errs, any_untrusted = {}, [], False
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_call, aname, aargs, execute, pre_approved): aid for aid, aname, aargs in resolved}
+            futures = {}
+            for a, (aid, aname, aargs) in zip(actions, resolved):
+                own_tainted = _tainted_sources(a.get("args") or {}, tainted_set)
+                fut = pool.submit(_call, aname, _fill_secrets(aargs, preview=False), execute,
+                                   pre_approved and not own_tainted, force_secret_keys=_secret_key_names(aargs))
+                futures[fut] = aid, aname
             for fut in futures:
-                aid = futures[fut]
+                aid, aname = futures[fut]
                 payload, text = fut.result()
                 out[aid] = payload
                 if not payload.get("ok", True):
                     errs.append(f"{aid}: {text}")
+                elif not any_untrusted:
+                    try:
+                        any_untrusted = registry.get(aname).untrusted_output
+                    except ControlError:
+                        pass
         if errs:
             raise _StepFailed("PARALLEL_FAILED", "; ".join(errs))
+        if any_untrusted:
+            ctx.setdefault("tainted", []).append(step.id)
         return out
 
     if t == "wait_for":

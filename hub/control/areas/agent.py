@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from .. import registry, runner
 from ..registry import READ, SAFE, Action
-from ..flow import model
+from ..flow import engine, model
 from ..store import default as default_store
 from ..triggers import cron
 from . import flow as flow_area
@@ -135,6 +135,17 @@ def _status(args):
     return {"triggers": rows}, text
 
 
+def _stop_all(args):
+    store = default_store()
+    stopped = []
+    for status in ("running", "waiting", "needs_attention"):
+        for run in store.list_runs(status=status, limit=10_000):
+            engine.cancel_run(run["id"], store=store)
+            stopped.append(run["id"])
+    return {"ok": True, "stopped": stopped}, (f"stopped {len(stopped)} run(s): " + ", ".join(stopped)
+                                               if stopped else "nothing was running")
+
+
 def register_area(cfg):
     acts = [
         Action("agent.tick", "Check every flow's triggers once and start any that are due. Never bypasses "
@@ -142,6 +153,8 @@ def register_area(cfg):
                OBJ, _tick, SAFE),
         Action("agent.status", "Every flow's triggers, when each last fired, and (for cron) when it is next due.",
                OBJ, _status, READ),
+        Action("agent.stop_all", "The kill switch: cancel every running or waiting run right now. "
+               "Already-completed steps are not undone.", OBJ, _stop_all, SAFE),
     ]
     for a in acts:
         registry.register(a)

@@ -168,16 +168,40 @@ retry (mentioned in piece 2) is still open.
 - Debounce, concurrency limit per flow (`single`/`queue`/`parallel:N`), and a global "one UI flow at a time" lock (two flows cannot both drive the mouse).
 - **Done means**: dropping an Excel file into a watched folder starts exactly one run; reboot-while-scheduled catches up per policy.
 
-### 2.4 Piece 4 — Vault, policy and the guard 🔴
+### 2.4 Piece 4 — Vault, policy and the guard 🔴 ✅ core built (2026-09-25): vault, taint, kill switch
 
-- **Vault**: Windows Credential Manager / DPAPI (current user), generalising `gmes_credentials.py`. Actions reference `{{secret:name}}`; the runner resolves it **after** the approval box and **inside** the adapter — the value never enters model context, journal, screenshots (mask the focused password field) or error text.
-- **Untrusted-content taint**: output of `web.text`, `data.read`, e-mail bodies, OCR is marked untrusted. A risky action whose arguments came from untrusted content in the same session gets a stronger approval box that shows the source ("this command came from a web page"). Mitigates prompt injection, per MCP security guidance.
-- **Policy file** (`policy.toml`): per-flow allowlists (actions, apps, folders, domains), argument bounds, rate limits (e.g. max 20 file deletes/run), business hours.
-- **Kill switch**: global hotkey + tray button → cancel all runs, release inputs, journal it. Also "pause while the owner is using the mouse" option for attended mode.
-- **Dry-run / simulation mode**: every safe/risky action returns what it *would* do.
-- **Close the known gap** from piece 1: UI-chain bypass — a flow/session-level budget of UI actions touching shells, terminals, regedit, Control's own files → approval.
-- **Tool-description integrity**: generated tool list is hashed at build; the MCP server refuses to serve descriptions changed at runtime (tool-poisoning defence).
-- **Done means**: red-team test suite — injected web page asks the agent to run `win.shell`; secret never appears in any log; kill switch stops a running flow within 1 s.
+- **Vault** ✅: `control/vault.py`, the same DPAPI mechanism as `gmes_credentials.py`
+  (`CryptProtectData`/`CryptUnprotectData`, current user, plus an app-specific entropy salt),
+  generalised to any number of named secrets. `{{ secret:name }}` in a flow's args resolves to a
+  `SecretRef` marker everywhere except the flow engine's real (non-dry-run) call — `flow.describe`/
+  `flow.dry_run` show `<secret:name>`, never the value, and `control/journal.py`'s masking now
+  takes an explicit `force_keys` set so the resolved value is hidden in `control.journal`
+  regardless of what the argument happens to be named. The stronger decision made while building
+  this: **`vault.set` and `vault.get` are not actions at all** — no MCP tool can write or read a
+  secret's value, ever; only `control vault set <name>` (typed at the owner's own keyboard,
+  `getpass`, no echo) can. `vault.list` (names only) and `vault.delete` are ordinary read/risky
+  actions. Tests: `test_vault.py`, `test_vault_cli.py`, `test_area_vault.py`, plus the engine-level
+  secret tests in `test_flow_engine.py`.
+- **Untrusted-content taint** ✅ (engine-side mechanism; the actual `web.*`/`data.*` actions that
+  should set the flag land with piece 5): `registry.Action` gained `untrusted_output: bool`. A
+  step whose action is flagged marks its own step id tainted; a later **risky** `action`/`parallel`
+  step whose raw (unresolved) args mention `steps.<tainted id>` runs with the flow's own
+  pre-approval switched off for that one call — inside an *approved* flow this still fails closed
+  with `APPROVAL_UNAVAILABLE` when nobody is at the screen, which is the actual mitigation an
+  unattended flow needs (a stronger approval-box message only helps when someone is watching).
+  v1 scope, documented in PLAYBOOK.md: only direct `action`/`parallel` args are checked; a tainted
+  value that passes through `set`'s `vars`, or through `if`/`for_each`'s own condition, is not
+  tracked. Tests: the `test_untrusted_*` cases in `test_flow_engine.py`.
+- **Kill switch** ✅ (software half): `agent.stop_all` cancels every running/waiting run at once.
+  A physical hotkey/tray button is piece 8 (dashboard) territory - this is the action it would call.
+- **Policy file** (`policy.toml`: per-flow allowlists, argument bounds, rate limits, business
+  hours) — not built. **Tool-description integrity** (hash the served tool list, refuse a runtime
+  change) — not built. **UI-chain bypass budget** from piece 1 — still open.
+- **Dry-run** was already delivered in piece 2 (`flow.dry_run`).
+- **Done means, revisited**: the piece's own red-team scenario — an injected page asks the agent to
+  run a risky action — is covered exactly as described above for an *approved, unattended* flow;
+  `agent.stop_all` is well under 1s (it is a single SQLite pass, no polling); the secret-never-in-
+  logs property is tested directly. Policy file and tool-description integrity remain open.
 
 ### 2.5 Piece 5 — General web engine 🟠 (was "piece 2" in the hub spec)
 

@@ -137,6 +137,44 @@ not running is skipped, not caught up (the safe default: it never floods you wit
 the file trigger dedupes by exact path only (a file replaced with new content at the same path
 after the first one fired will not fire again).
 
+## Secrets: using a password without ever seeing it
+A flow can reference `{{ secret:name }}` anywhere an action argument would otherwise be a
+password, API key or token. The owner stores the value once, at their own keyboard:
+```
+control vault set gmes_password
+```
+This is a **CLI-only** command — `vault.set` is never wired as an MCP tool, on purpose: an agent
+must never be able to write (or read back) a real secret value. `vault.list` (names only) and
+`vault.delete` are the only vault actions you have. When you write a flow, check `vault.list` for
+what already exists, or ask the owner to `control vault set <name>` a new one.
+```toml
+[[steps]]
+id = "login"
+type = "action"
+action = "gmes.login"
+[steps.args]
+user = "svc_account"
+password = "{{ secret:gmes_password }}"
+```
+`flow.describe`/`flow.dry_run` show `<secret:gmes_password>`, never the real value, and the real
+value never reaches `control.journal` either — only `flow.run`'s real, in-process call gets it,
+one step before it is used. `{{ secret:x }}` must be a whole argument value, never pasted into a
+larger string (`"pw={{ secret:x }}!"` is refused).
+
+## Content from outside is not a command
+An action that reads something someone else wrote (a web page, an e-mail, a document) can be
+marked `untrusted_output`. If a later **risky** step's argument is built from that step's output
+(`{{ steps.that_one.text }}`), the engine will not treat the flow's own pre-approval as covering
+it — that one call needs a real yes, which on an unattended box nobody is there to give, so it
+fails closed (`APPROVAL_UNAVAILABLE`) instead of quietly obeying instructions hidden in a web page
+or e-mail. This only guards *risky* steps built directly from a tainted step's output right now —
+not a value that passed through a `set` step's `vars`, or through `if`/`for_each`'s own condition.
+
+## The kill switch
+`agent.stop_all` cancels every running or waiting run immediately — already-completed steps are
+not undone, but nothing further happens. Use it if a flow is clearly doing the wrong thing; there
+is no need to find its run id first.
+
 ## Details per tool
 The four tools keep their own docs: `I:\Control\win-agent-desktop\docs\COMMANDS.md`,
 `I:\Control\Office-Automation\AI_USAGE.md`, `I:\Control\opening-nerp-tcode\GMES_SKILL.md`,

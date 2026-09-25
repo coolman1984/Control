@@ -3,7 +3,7 @@ import importlib
 
 from .. import config, registry
 
-AREA_MODULES = ["core", "flow", "agent", "win", "data", "sys", "gmes"]
+AREA_MODULES = ["core", "flow", "agent", "vault", "win", "data", "sys", "gmes"]
 
 
 def load_all(cfg=None):

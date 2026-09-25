@@ -14,6 +14,9 @@ USAGE = """control - one front door for Windows apps, websites, G-MES, PC repair
   control undo <id>                reverse a change
   control mcp [--areas win,sys]    serve every action to an AI agent over MCP
   control agent [--interval N]     run forever, checking every flow's triggers (piece 3)
+  control vault set <name>         store a secret for {{ secret:name }} (typed here, never over MCP)
+  control vault list               names of the stored secrets (never their values)
+  control vault delete <name>      remove a stored secret
   control <area.verb> --help       one action, e.g. control sys.health
 """
 
@@ -56,6 +59,9 @@ def main(argv=None):
         print(USAGE)
         return 0
     cmd, rest = argv[0], argv[1:]
+    if cmd == "vault":
+        from . import vault as vault_cli
+        return vault_cli.main(rest)
     if cmd == "mcp":
         from . import mcp
         preload = []

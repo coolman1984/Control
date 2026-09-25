@@ -103,7 +103,7 @@ class Store:
             "INSERT INTO runs (id, flow_name, flow_hash, flow_text, status, input, context, cursor, "
             "parent_run_id, dry_run, created_at, updated_at) VALUES (?,?,?,?,?,?,?,0,?,?,?,?)",
             (run_id, flow_name, flow_hash, flow_text, "running", json.dumps(input_, ensure_ascii=False),
-             json.dumps({"input": input_, "steps": {}, "vars": {}}, ensure_ascii=False), parent_run_id,
+             json.dumps({"input": input_, "steps": {}, "vars": {}, "tainted": []}, ensure_ascii=False), parent_run_id,
              int(dry_run), now, now))
         return self.get_run(run_id)
 

@@ -116,6 +116,23 @@ stable_for_s = 0
     assert payload["fired"] == []                    # same file: already fired, not again
 
 
+def test_stop_all_cancels_every_active_run(clean_registry, control_home):
+    setup(clean_registry)
+    write_flow("wait1", 'name = "wait1"\n[[steps]]\nid="ask"\ntype="ask_human"\nprompt="?"\n')
+    write_flow("wait2", 'name = "wait2"\n[[steps]]\nid="ask"\ntype="ask_human"\nprompt="?"\n')
+    runner.execute("flow.approve", {"name": "wait1"}, approver=lambda *a: safety.YES)
+    runner.execute("flow.approve", {"name": "wait2"}, approver=lambda *a: safety.YES)
+    r1, _ = runner.execute("flow.run", {"name": "wait1"})
+    r2, _ = runner.execute("flow.run", {"name": "wait2"})
+    assert r1["status"] == "waiting" and r2["status"] == "waiting"
+
+    payload, _ = runner.execute("agent.stop_all", {})
+    assert sorted(payload["stopped"]) == sorted([r1["id"], r2["id"]])
+
+    got1, _ = runner.execute("run.get", {"id": r1["id"]})
+    assert got1["status"] == "cancelled"
+
+
 def test_status_lists_triggers(clean_registry, control_home):
     setup(clean_registry)
     write_flow("ping", """

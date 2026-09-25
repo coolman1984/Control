@@ -23,6 +23,9 @@ class Action:
     tier: Any                       # a tier string, or a function(args) -> tier
     image: bool = False
     why: str = ""
+    untrusted_output: bool = False  # its result carries outside content (a web page, an e-mail,
+                                     # OCR text): a flow step downstream may not treat it as a
+                                     # command (see control/flow/engine.py's taint tracking)
 
     @property
     def area(self):

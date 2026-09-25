@@ -8,6 +8,27 @@ from ..errors import ControlError
 
 _TOKEN = re.compile(r"\{\{\s*(.*?)\s*\}\}")
 _PATH = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*$")
+_SECRET = re.compile(r"^secret:([A-Za-z0-9_.-]+)$")
+
+
+class SecretRef:
+    """A `{{ secret:name }}` that resolved to *a reference*, not the value: the flow engine swaps
+    it for the real value from the vault only immediately before the real call (control/flow/
+    engine.py), never here — so a secret can never appear in flow.describe/dry_run output, which
+    an agent (and so a model) can read."""
+    __slots__ = ("name",)
+
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, other):
+        return isinstance(other, SecretRef) and other.name == self.name
+
+    def __hash__(self):
+        return hash(("SecretRef", self.name))
+
+    def __repr__(self):
+        return f"<secret:{self.name}>"
 
 
 def _lookup(path, ctx):
@@ -37,10 +58,18 @@ def resolve_template(s, ctx):
     stripped = s.strip()
     whole = _TOKEN.fullmatch(stripped)
     if whole and stripped == s:
-        return _lookup(whole.group(1), ctx)
+        inner = whole.group(1)
+        secret = _SECRET.match(inner)
+        if secret:
+            return SecretRef(secret.group(1))
+        return _lookup(inner, ctx)
 
     def sub(m):
-        value = _lookup(m.group(1), ctx)
+        inner = m.group(1)
+        if _SECRET.match(inner):
+            raise ControlError("EXPR_INVALID", f"{{{{ {inner} }}}} must be the whole argument value",
+                                "a secret can't be pasted into the middle of a larger string")
+        value = _lookup(inner, ctx)
         return value if isinstance(value, str) else repr(value) if value is None else str(value)
 
     return _TOKEN.sub(sub, s)

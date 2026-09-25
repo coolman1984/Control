@@ -18,7 +18,7 @@ _REFUSALS = {
 }
 
 
-def execute(name, args=None, *, journal=None, approver=None, pre_approved=False):
+def execute(name, args=None, *, journal=None, approver=None, pre_approved=False, force_secret_keys=()):
     journal = journal or journal_mod.default()
     approver = approver or safety.approve
     started = time.monotonic()
@@ -35,7 +35,7 @@ def execute(name, args=None, *, journal=None, approver=None, pre_approved=False)
             raise ControlError("REFUSED", "an approval box is open; UI actions wait until the person answers it",
                                "wait, then retry")
         if tier == RISKY and not pre_approved:
-            approve_args = args
+            approve_args = journal_mod.mask(args, name, force_keys=force_secret_keys) if force_secret_keys else args
             if name == "control.undo":
                 try:
                     entry = journal.get(args.get("id"))
@@ -58,7 +58,8 @@ def execute(name, args=None, *, journal=None, approver=None, pre_approved=False)
     if tier is not None and tier != READ:
         payload["journal_id"] = journal.append(
             action=name, args=args, tier=tier, approval=approval, ok=payload.get("ok", True),
-            code=payload.get("code"), ms=int((time.monotonic() - started) * 1000), undo=undo)
+            code=payload.get("code"), ms=int((time.monotonic() - started) * 1000), undo=undo,
+            force_secret_keys=force_secret_keys)
     return payload, text
 
 
