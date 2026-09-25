@@ -15,6 +15,7 @@ DEFAULTS = {
     "data_workspace": None,
     "timeouts": {"gmes": 1800, "sys": 300, "sys_fix": 900, "startup": 15},
     "approval_timeout": 120,
+    "agent_poll_s": 30,
 }
 
 

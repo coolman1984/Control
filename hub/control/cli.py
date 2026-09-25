@@ -13,6 +13,7 @@ USAGE = """control - one front door for Windows apps, websites, G-MES, PC repair
   control journal [N]              the last changes
   control undo <id>                reverse a change
   control mcp [--areas win,sys]    serve every action to an AI agent over MCP
+  control agent [--interval N]     run forever, checking every flow's triggers (piece 3)
   control <area.verb> --help       one action, e.g. control sys.health
 """
 
@@ -62,6 +63,12 @@ def main(argv=None):
             preload = rest[rest.index("--areas") + 1].split(",")
         return mcp.serve(preload=preload)
     areas.load_all()
+    if cmd == "agent":
+        from . import agent
+        interval = None
+        if "--interval" in rest and rest.index("--interval") + 1 < len(rest):
+            interval = float(rest[rest.index("--interval") + 1])
+        return agent.run_forever(interval_s=interval)
     if cmd == "guide":
         from . import guide
         if "--write" in rest:

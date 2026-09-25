@@ -57,6 +57,24 @@ CREATE TABLE IF NOT EXISTS locks (
     run_id      TEXT NOT NULL,
     acquired_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS trigger_state (
+    flow_name     TEXT NOT NULL,
+    trigger_idx   INTEGER NOT NULL,
+    last_fired_at TEXT,
+    last_run_id   TEXT,
+    PRIMARY KEY (flow_name, trigger_idx)
+);
+
+CREATE TABLE IF NOT EXISTS seen_files (
+    flow_name   TEXT NOT NULL,
+    trigger_idx INTEGER NOT NULL,
+    path        TEXT NOT NULL,
+    size        INTEGER,
+    mtime       REAL,
+    fired_at    TEXT NOT NULL,
+    PRIMARY KEY (flow_name, trigger_idx, path)
+);
 """
 
 
@@ -215,6 +233,33 @@ class Store:
     def lock_holder(self, flow_name):
         row = self.conn.execute("SELECT run_id FROM locks WHERE flow_name=?", (flow_name,)).fetchone()
         return row[0] if row else None
+
+    # ---- trigger bookkeeping (piece 3: scheduler & event triggers) --------
+
+    def get_trigger_state(self, flow_name, trigger_idx):
+        row = self.conn.execute("SELECT last_fired_at, last_run_id FROM trigger_state "
+                                 "WHERE flow_name=? AND trigger_idx=?", (flow_name, trigger_idx)).fetchone()
+        if row is None:
+            return {"last_fired_at": None, "last_run_id": None}
+        return {"last_fired_at": row[0], "last_run_id": row[1]}
+
+    def set_trigger_state(self, flow_name, trigger_idx, *, last_fired_at, last_run_id=None):
+        self.conn.execute(
+            "INSERT INTO trigger_state (flow_name, trigger_idx, last_fired_at, last_run_id) VALUES (?,?,?,?) "
+            "ON CONFLICT(flow_name, trigger_idx) DO UPDATE SET "
+            "last_fired_at=excluded.last_fired_at, last_run_id=excluded.last_run_id",
+            (flow_name, trigger_idx, last_fired_at, last_run_id))
+
+    def seen_file(self, flow_name, trigger_idx, path):
+        row = self.conn.execute("SELECT size, mtime, fired_at FROM seen_files "
+                                 "WHERE flow_name=? AND trigger_idx=? AND path=?",
+                                 (flow_name, trigger_idx, path)).fetchone()
+        return None if row is None else {"size": row[0], "mtime": row[1], "fired_at": row[2]}
+
+    def mark_seen_file(self, flow_name, trigger_idx, path, size, mtime):
+        self.conn.execute(
+            "INSERT OR REPLACE INTO seen_files (flow_name, trigger_idx, path, size, mtime, fired_at) "
+            "VALUES (?,?,?,?,?,?)", (flow_name, trigger_idx, path, size, mtime, _now()))
 
 
 _default = None

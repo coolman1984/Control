@@ -33,6 +33,10 @@ class Step:
         return self.raw.get(key, default)
 
 
+TRIGGER_TYPES = {"cron", "interval", "file"}
+REQUIRED_TRIGGER_FIELDS = {"cron": ["expr"], "interval": ["seconds"], "file": ["watch"]}
+
+
 @dataclass
 class Flow:
     name: str
@@ -41,6 +45,7 @@ class Flow:
     concurrency: str = "single"          # "single" | "parallel"
     input_schema: dict = field(default_factory=dict)
     steps: list = field(default_factory=list)
+    triggers: list = field(default_factory=list)   # raw dicts: {"type": "cron"/"interval"/"file", ...}
 
     @property
     def hash(self):
@@ -94,8 +99,15 @@ def parse(text, name=None):
     steps = _build_steps(data.get("steps"))
     if not steps:
         raise FlowError("flow has no steps")
+    triggers = data.get("triggers") or []
+    for i, trig in enumerate(triggers):
+        if trig.get("type") not in TRIGGER_TYPES:
+            raise FlowError(f"triggers[{i}]: type must be one of {sorted(TRIGGER_TYPES)}, got {trig.get('type')!r}")
+        for key in REQUIRED_TRIGGER_FIELDS[trig["type"]]:
+            if trig.get(key) in (None, ""):
+                raise FlowError(f"triggers[{i}]: {trig['type']} needs {key!r}")
     return Flow(name=flow_name, text=text, description=data.get("description", ""),
-                concurrency=concurrency, input_schema=data.get("input", {}), steps=steps)
+                concurrency=concurrency, input_schema=data.get("input", {}), steps=steps, triggers=triggers)
 
 
 def parse_file(path):
@@ -163,4 +175,18 @@ def validate(flow, *, known_action=None):
             walk(s.steps, nested=True)
 
     walk(flow.steps, nested=False)
+
+    from ..triggers import cron
+    for i, trig in enumerate(flow.triggers):
+        if trig["type"] == "cron":
+            try:
+                cron.parse(trig["expr"])
+            except cron.CronError as e:
+                issues.append(f"triggers[{i}]: {e}")
+        elif trig["type"] == "interval":
+            if not isinstance(trig.get("seconds"), int) or trig["seconds"] < 1:
+                issues.append(f"triggers[{i}]: interval seconds must be a positive integer")
+        elif trig["type"] == "file":
+            if trig.get("stable_for_s") is not None and not isinstance(trig["stable_for_s"], int):
+                issues.append(f"triggers[{i}]: stable_for_s must be an integer")
     return issues

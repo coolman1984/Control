@@ -101,6 +101,42 @@ name = "send"
 required = true
 ```
 
+## Triggers: making an approved flow start itself
+Add `[[triggers]]` to a flow file and `control agent` (a loop the owner starts once, see below)
+will start it for you — no one has to call `flow.run` by hand. Three kinds:
+
+```toml
+[[triggers]]
+type = "cron"
+expr = "0 8 * * 1-5"        # minute hour day-of-month month day-of-week; weekdays at 08:00
+
+[[triggers]]
+type = "interval"
+seconds = 1800               # every 30 minutes, starting from when the agent first sees it
+
+[[triggers]]
+type = "file"
+watch = "C:\\Users\\owner\\Inbox"
+pattern = "*.xlsx"
+stable_for_s = 5              # ignore a file until it hasn't changed for this long
+```
+A trigger never skips the approval model: it starts the flow through the same `flow.run` you would
+call yourself, so an **unapproved** risky flow still fails closed (`APPROVAL_UNAVAILABLE`) if
+nobody is at the screen — `flow.approve` is what buys unattended operation, not the trigger.
+`agent.tick` is the one thing that checks triggers (call it yourself to check right now);
+`agent.status` shows every trigger and, for cron, when it is next due.
+
+**Starting the agent on Windows** (piece 3's target: this PC, this PC only, screen-attended
+approvals): register `control agent` as a Task Scheduler task that starts **at log on**, not as a
+Windows service — a service runs in a session with no desktop, so it could never show the
+approval box or drive `win.*`/`web.*`. A second task that also runs at log on and restarts it if
+it ever exits is a cheap watchdog.
+
+v1 limits, worth knowing before relying on this: a missed cron/interval fire while the agent was
+not running is skipped, not caught up (the safe default: it never floods you with backlog runs);
+the file trigger dedupes by exact path only (a file replaced with new content at the same path
+after the first one fired will not fire again).
+
 ## Details per tool
 The four tools keep their own docs: `I:\Control\win-agent-desktop\docs\COMMANDS.md`,
 `I:\Control\Office-Automation\AI_USAGE.md`, `I:\Control\opening-nerp-tcode\GMES_SKILL.md`,

@@ -122,7 +122,35 @@ table yet — piece 3's per-item retry API is a natural extension once triggers 
 - **Pre-approval**: owner approves a flow version once; approval stored as hash of the flow file + its risky steps + argument bounds. Any edit invalidates it. Approvals can expire.
 - **Done means**: a "G-MES report → xl2ai analyse → Outlook draft" flow survives a kill -9 mid-run and completes on restart with no duplicate report; unit tests cover replay, retry, compensation, invalidated approval.
 
-### 2.3 Piece 3 — Triggers & scheduler 🔴
+### 2.3 Piece 3 — Triggers & scheduler 🔴 ✅ first version built (2026-09-25): cron, interval, file
+
+Built as `control/triggers/cron.py` (a compact stdlib-only 5-field cron matcher — no dependency,
+same stdlib-only reasoning as piece 2's TOML choice) + `control/areas/agent.py` (`agent.tick`/
+`agent.status`) + `control/agent.py` (`control agent`, the foreground loop). Triggers live inside
+the flow file itself as `[[triggers]]` — one automation stays one file. A trigger never bypasses
+the approval model: it always starts the flow through `flow.run`, so an unapproved risky flow
+still fails closed if nobody is at the screen (`agent.tick` itself is tier `safe` — it is the
+already-tiered `flow.run` call underneath that gates). Tests: `test_cron.py`,
+`test_flow_triggers.py`, `test_area_agent.py`, `test_agent_loop.py`.
+
+`control agent` is registered as a Windows **Task Scheduler "at log on" task**, not a service —
+a service has no desktop (Session 0 isolation), so it could never show the approval box or drive
+`win.*`/`web.*`; a second watchdog task restarts it if it exits. This matches the owner's decision
+to run on this PC only, Windows-only, approvals on-screen only.
+
+Delivered now: `cron` (minute/hour/dom/month/dow, `*`, `a-b`, `a/n`, `a-b/n`, lists, the standard
+"both dom and dow restricted → OR" quirk), `interval` (fires immediately the first time the agent
+sees it, then every N seconds), `file` (glob + "not modified in the last N seconds" stability +
+dedupe by exact path so a fired file never fires again).
+
+Known v1 limits (documented in PLAYBOOK.md, fast-follows for later): missed cron/interval fires
+while the agent was not running are **skipped**, not caught up (`run_once`/`catch_up` policies from
+the original table are not implemented, though `missed_run` is a TOML field ready to be read once
+they are); the file trigger dedupes by path only, not content hash, so a file replaced in place
+after firing will not fire again; e-mail, window/process, Windows-event-log, system-state, hotkey
+and webhook triggers are not built yet — real Windows integrations that need a Windows box to
+build and test against (this session runs in a Linux container); a queue table for per-item
+retry (mentioned in piece 2) is still open.
 
 | Trigger | Mechanism |
 |---|---|
