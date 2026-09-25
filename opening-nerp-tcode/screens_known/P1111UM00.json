@@ -1,0 +1,29 @@
+{
+  "division": {
+    "dataset": "dsCatCommonTreeNodeDVO",
+    "form": "OrgCategory_GDS"
+  },
+  "fingerprint": "142c8a25f43041f4",
+  "from": {
+    "column": "paramFromDate",
+    "control": "mskDateFrom",
+    "dataset": "dsFilterDVO",
+    "form": "P1111UF00.xfdl.js",
+    "label": "Period"
+  },
+  "grid": {
+    "dataset": "dsModelPlanList",
+    "form": "",
+    "name": "grdSum"
+  },
+  "menuId": "PPM0218",
+  "screen": "P1111UM00",
+  "title": "Production Plan by Model",
+  "to": {
+    "column": "paramToDate",
+    "control": "mskDateTo",
+    "dataset": "dsFilterDVO",
+    "form": "P1111UF00.xfdl.js",
+    "label": "Period"
+  }
+}

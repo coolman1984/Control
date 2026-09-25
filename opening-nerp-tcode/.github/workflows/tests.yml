@@ -1,0 +1,62 @@
+name: Offline test suites
+
+# Every offline suite listed in CLAUDE.md 4.3 / README.md, run on every push
+# and pull request against main. None of them needs a browser or a network
+# (CLAUDE.md 4.3's own guarantee) - this workflow exists to make that
+# guarantee mechanically enforced rather than only promised in a doc, and to
+# catch the exact failure shape HISTORY.md Phase 78.5 found by hand: a test
+# that still reports "ok" while quietly making a real network call and
+# burning real time. `timeout-minutes` on the job is the backstop for that
+# specific regression shape, not a normal expectation - the whole suite runs
+# in low single-digit seconds locally.
+#
+# windows-latest because this project is Windows-only (CLAUDE.md 5):
+# gmes_credentials.py's DPAPI store goes through ctypes.windll, and several
+# tests exercise Windows-specific paths (winreg, tasklist, robocopy) via
+# mocks that still import the real modules being mocked.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    # One suite per matrix job, not seven sequential steps in one job.
+    # Sequential steps share a single pass/fail: a failure in step 3 stops
+    # the job there and steps 4-7 never run at all - live-confirmed on this
+    # project's own main (CI run 35091480354, third-party review): only
+    # test_cdp_common.py and test_gmes_core.py had actually executed before
+    # test_legacy_hardening.py failed and the remaining four suites were
+    # silently skipped, not merely unreported. `fail-fast: false` keeps that
+    # from cascading the other direction too - one suite's failure must not
+    # cancel the other six mid-run and hide whether THEY still pass.
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - test_cdp_common.py
+          - test_gmes_core.py
+          - test_legacy_hardening.py
+          - test_gmes_workflow.py
+          - test_legacy_entrance.py
+          - test_project_eye.py
+          - test_browser_bootstrap.py
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: ${{ matrix.suite }}
+        run: python tests/${{ matrix.suite }}

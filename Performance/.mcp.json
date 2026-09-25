@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "winsight": {
+      "command": "winsight.exe",
+      "args": ["mcp"]
+    }
+  }
+}

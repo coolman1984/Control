@@ -1,0 +1,58 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Diagnostic screenshots saved automatically when a step fails.
+nerp_*.png
+
+
+gmes_*.png
+live_results.txt
+credentials.dat
+
+# Exported production data must never be committed.
+*.csv
+forms.txt
+
+# Nightly exports - production data, never committed.
+Data Hub Folder/
+
+# What a run on THIS machine proved: the division, dates and filter values it
+# used. Production data - never committed.
+#
+# Anchored to the repo root (leading slash) for two reasons. It once silently
+# matched src/gmes/screens/ and git dropped that directory with no warning
+# (Phase 29). And it must NOT match `screens_known/`, which is the structural
+# half of the same knowledge - no values, no commands - and IS committed, so
+# that a new user gets working screens without inheriting anyone's order
+# numbers (Phase 73.3). `gmes_profile.shippable()` is the line between them.
+/screens/
+
+# Launcher scripts for scheduled batches (gmes_schedule.py). Each one embeds
+# this machine's Python and project paths, so it belongs to this machine only.
+/schedules/
+
+demo_*.png
+
+# Run logs - they contain filter values and row counts, i.e. production data.
+logs/
+
+# Raw agent session transcripts. Some contain live G-MES session tokens
+# (tokenId/refreshTokenId JWTs) pasted during debugging - CLAUDE.md 2.3
+# forbids committing those under any circumstance.
+Doc/
+
+# Isolated agent worktrees are local implementation sandboxes.
+.worktrees/
+
+# Local orchestration ledger and agent review artifacts.
+.superpowers/

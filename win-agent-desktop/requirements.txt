@@ -1,0 +1,8 @@
+# core: UI Automation
+uiautomation>=2.0.29
+# excel-* / word-* commands (Office object model)
+pywin32>=306; sys_platform == "win32"
+# screenshots of any region / the whole screen, --marks, --region
+Pillow>=10
+# browser-* commands (Chrome / Edge DevTools protocol)
+websocket-client>=1.6

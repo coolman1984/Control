@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+
+# Generated SQLite outputs
+output/
+test_output/
+
+# Local environment and tooling files
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+.coverage
+htmlcov/
+

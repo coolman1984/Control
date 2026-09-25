@@ -1,0 +1,60 @@
+system:
+  name: gmes-automation
+  domains:
+    - name: gmes
+      status: active
+      entrances:
+        primary: GMES_Workflow.bat
+        no_args: python run_gmes_workflow.py
+        with_args: python gmes_report.py run %*
+      code: [gmes_core.py, gmes_login.py, gmes_common.py, gmes_open_screen.py,
+             gmes_profile.py, gmes_data.py, gmes_ui.py, gmes_log.py,
+             gmes_report.py, gmes_credentials.py, gmes_batch.py, gmes_schedule.py,
+             gmes_library.py, gmes_redact.py]
+      shared_infrastructure: [cdp_common.py, gmes_browsers.py]
+      runtime:
+        browser:
+          - "Chromium-CDP via cdp_common.launch_automation_chrome (Chrome or Edge; chosen once by gmes_browsers.ensure_bootstrapped)"
+          - "%LOCALAPPDATA%/GMES_Automation/profiles/default (the tool's own profile; built on first run by copying the user's Chrome/Edge profile on THIS machine, or empty when there is nothing to copy)"
+          - "%LOCALAPPDATA%/GMES_Automation/browser.json (which browser and profile first-run chose, and the machine it was chosen on; never contains a secret)"
+          - "%LOCALAPPDATA%/Google/Chrome/CDP Profile (the older copy, driven only by launch_chrome_with_user_profile / --refresh-profile; explicit exception, protected)"
+        credentials:
+          - "%LOCALAPPDATA%/GMES_Automation/credentials.dat (active legacy store used by gmes_credentials.py; protected)"
+          - "%LOCALAPPDATA%/GMES/credentials.dat (historical donor store; protected, never migrated or deleted)"
+        logs: ["repository logs/ directory (gmes_log.py)"]
+        batches:
+          - "screens/batches/<name>.json (saved batch lists; git-ignored)"
+          - "Data Hub Folder/GMES/batch_<time>/ (the files of one batch run; git-ignored)"
+          - "logs/batches/batch_<time>.json|txt (batch reports) and logs/scheduled_<name>.log (unattended runs)"
+          - "schedules/run_<name>.cmd (launcher a scheduled task runs; git-ignored, machine-specific)"
+          - "Windows Task Scheduler tasks GMES_Batch_<name> (current user, interactive logon; run only while signed in)"
+      enforcement:
+        rule: every G-MES entrance loads zero gmes.* package modules
+        test: "tests/test_legacy_entrance.py + tests/test_project_eye.py"
+    - name: removed-standalone-gmes-package
+      status: removed
+      formerly: src/gmes
+      removed_in: HISTORY.md Phase 57 (see git log for the exact commit)
+      recoverable_from:
+        - "git history: commit 59eb838"
+        - "branch archive/standalone-gmes-before-removal"
+      capability_disposition: docs/history/CAPABILITY_RESCUE_MAP.md
+      note: >
+        This entry documents that the package existed and was removed; it is
+        not an active component and no code in this tree imports it.
+    - name: removed-nerp
+      status: removed
+      formerly: [search_tcode.py, execute_filters.py, export_to_excel.py,
+                 run_nerp_workflow.py, NERP_Workflow.bat,
+                 tests/test_unit.py, tests/test_live_chrome.py,
+                 tests/mock_nerp_server.py]
+      removed_in: HISTORY.md Phase 72
+      recoverable_from:
+        - "branch archive/nerp-before-removal"
+      note: >
+        SAP GUI for HTML automation, dormant since Phases 0-3 and removed in
+        Phase 72. Its half of cdp_common.py went with it, verified unused by
+        any G-MES file first. Open Items #3 and #14 were closed by that
+        removal rather than by any fix, and both defects are still present in
+        the archive branch. The shared-CDP guards that test_unit.py carried
+        were migrated to tests/test_cdp_common.py BEFORE the deletion.

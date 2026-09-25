@@ -1,0 +1,29 @@
+{
+  "division": {
+    "dataset": "dsCatCommonTreeNodeDVO",
+    "form": "OrgCategory_GDS"
+  },
+  "fingerprint": "ca295ca559fa9285",
+  "from": {
+    "column": "fromYmd",
+    "control": "mskFromDate",
+    "dataset": "dsFilterDVO",
+    "form": "P2237UF00.xfdl.js",
+    "label": "Period"
+  },
+  "grid": {
+    "dataset": "dsP2237UM0002DVOList",
+    "form": "",
+    "name": "grdMain"
+  },
+  "menuId": "PPM0628",
+  "screen": "P2237UM00",
+  "title": "Manufacturing personnel management(SET)",
+  "to": {
+    "column": "toYmd",
+    "control": "mskToDate",
+    "dataset": "dsFilterDVO",
+    "form": "P2237UF00.xfdl.js",
+    "label": "Period"
+  }
+}

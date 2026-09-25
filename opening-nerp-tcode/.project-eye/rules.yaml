@@ -1,0 +1,49 @@
+rules:
+  - id: gmes-entrances-are-legacy-only
+    rule: both GMES_Workflow.bat branches (no-argument and argument-bearing) load flat legacy modules from the repository root and zero gmes.* package modules
+    enforcement: tests/test_legacy_entrance.py
+  - id: launcher-cannot-repoint-to-a-package
+    rule: GMES_Workflow.bat text (matched case-insensitively) never contains PYTHONPATH, "python -m gmes", or "gmes.bat" - the three ways the entrance drifted to a package engine before
+    enforcement: tests/test_legacy_entrance.py
+  - id: no-standalone-package-in-tree
+    rule: no src/gmes directory is tracked in the repository; the former package is recoverable from git history only (commit 59eb838, branch archive/standalone-gmes-before-removal), never present as a directory that could be run by accident
+    enforcement: tests/test_legacy_entrance.py
+  - id: cdp-common-is-the-transport-every-run-uses
+    rule: cdp_common.py is the CDP transport every G-MES entrance passes through; a change to it must keep tests/test_cdp_common.py and the G-MES suites green in the same commit. It carried N-ERP too until HISTORY.md Phase 72; the guards that protect the shared half now live in a file named after the module, not after a system.
+    enforcement: "tests/test_cdp_common.py + tests/test_gmes_core.py + tests/test_legacy_hardening.py"
+  - id: shared-cdp-guards-must-not-be-deleted-with-a-system
+    rule: tests/test_cdp_common.py must exist. It holds the only automated proof of --disable-popup-blocking (AD SSO, Phase 56.1/57.7) and capture_screenshot(tab=) (Phase 56.4/57.8); both were nearly lost in Phase 72 because they lived in a file named for the system being removed.
+    enforcement: tests/test_project_eye.py
+  - id: credentials-dpapi-only
+    rule: "no password is written anywhere but the DPAPI store (gmes_credentials.py for G-MES); never printed, logged, or passed as an argument. The active %LOCALAPPDATA%/GMES_Automation/credentials.dat and historical %LOCALAPPDATA%/GMES/credentials.dat stores are both protected: neither may be inspected, migrated, overwritten, normalized, or deleted."
+    enforcement: "CLAUDE.md rules 2.1a/2.2 + tests/test_project_eye.py"
+  - id: gmes-screenshots-use-explicit-targets
+    rule: G-MES diagnostics use gmes_common's strict resolver unless they are gmes_inspect.py iterating an explicit tab; that sole direct CDP capture must pass tab=tab. Generic G-MES screenshot calls without an explicit target are forbidden.
+    enforcement: tests/test_legacy_hardening.py
+  - id: the-users-real-browser-profile-is-read-only
+    rule: "the user's real Chrome/Edge profile is read during the first-run copy and never otherwise touched: never launched, never debugged, never written to, never deleted. cdp_common.launch_automation_chrome refuses any --user-data-dir that is, or is inside, a real profile of either supported browser."
+    enforcement: "tests/test_browser_bootstrap.py + CLAUDE.md rules 2.1/2.1a"
+  - id: the-first-run-copy-happens-once
+    rule: "a profile is copied only when the automation has none. Once %LOCALAPPDATA%/GMES_Automation/browser.json records a completed run - or a profile directory simply exists - nothing is copied again, because a second copy would overwrite the G-MES session the automation has since earned. A copy is promoted into place by one rename after verification, so an interrupted first run never leaves a partial profile that a later run would drive."
+    enforcement: tests/test_browser_bootstrap.py
+  - id: a-profile-copy-never-crosses-machines
+    rule: "browser.json records the machine its profile was built on. A record from another PC is never reused - Chrome 140+ binds cookie encryption to the machine, so the copy would decrypt nothing silently - and is never deleted either; this machine is set up in a directory of its own beside it."
+    enforcement: tests/test_browser_bootstrap.py
+  - id: left-panel-options-are-never-remembered-by-rendered-text
+    rule: "a REMEMBERED left-panel option (resolve_option()/option_identity()) is never matched on label first. The UI language is a G-MES ACCOUNT preference (gvLanguage), not a browser setting - the same screen renders Korean and English for the same user - so the stored identity is the control's own Nexacro `name` and the semantic key derived from it, with the label kept as display metadata only. Ambiguous matches are refused with diagnostics, never resolved by picking one. This does NOT extend to gmes_core.match_filter(), which matches bound FILTER fields by column, label or control name by design (a screen can be driven either the way it reads on screen or the way it is stored) - a caller typing a filter name is not the same claim as a profile replaying unattended."
+    enforcement: "tests/test_gmes_core.py (OptionKeys, ReplayAcrossLanguages, OptionResolutionSafety) + CLAUDE.md 3.3/3.9"
+  - id: one-gmes-tab-per-browser
+    rule: "the automation browser holds exactly one G-MES page. A successful AD SSO popup follows its RelayState back to the G-MES host and becomes a second Nexacro application, so sign-in prunes duplicates, keeps the tab that has work screens open, never touches an SSO tab mid-flight, and confirms a close by re-listing. Tabs are closed; browsers are not (CLAUDE.md 2.6)."
+    enforcement: tests/test_legacy_hardening.py (DuplicateGmesTabPruning)
+  - id: login-page-defaults-to-english-every-time
+    rule: "gmes_login.main() switches the pre-signin login form to English on every state == 'login' reached, not once - the toggle is purely client-side (zero network requests, verified) and does not survive a reload. It must never be confused with the account-side gvLanguage setting the signed-in application uses, which remains untouched (CLAUDE.md 2.5), and a failed switch must never abort sign-in. The two toggle controls (staEng/staKor) must both be read and required to disagree before either is treated as selected - never a bare check of one."
+    enforcement: tests/test_legacy_hardening.py (LoginPageDefaultsToEnglish)
+  - id: lockout-detection-must-not-rely-only-on-unverified-wording
+    rule: "lockout_warning()'s language markers include guessed, never-live-verified wording (observing a real refusal costs a lockout attempt). A structural, language-independent marker - the '(N/M)' attempt counter's own shape - must always be present alongside any guessed phrase, so a wrong or missing translation guess is not the only thing standing between a real refusal and a silent retry."
+    enforcement: "tests/test_legacy_hardening.py (LoginPageDefaultsToEnglish - marker-extraction tests read the real JS_LOCKOUT_WARNING source, not a copy)"
+  - id: never-sleep-a-fixed-duration
+    rule: automation waits poll until the observed condition is true, with a generous cap - never a bare time.sleep(N) standing in for a wait
+    enforcement: manual review per CLAUDE.md rule 3.1 (no automated static check in this repository)
+  - id: history-entry-per-behavior-change
+    rule: any change to automation behavior carries a HISTORY.md entry in the same commit, in Symptom/Cause/Fix/Lesson shape
+    enforcement: manual review per CLAUDE.md rule 1

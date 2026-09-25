@@ -1,0 +1,18 @@
+{
+  "division": {
+    "dataset": "dsCatCommonTreeNodeDVO",
+    "form": "OrgCategory_GDS"
+  },
+  "fingerprint": "84ab1ef7f283b937",
+  "from": null,
+  "grid": {
+    "dataset": "dsGrdDelMainList",
+    "form": "",
+    "name": "grdbatch"
+  },
+  "menuId": "PPM0221",
+  "opening_fingerprint": "84ab1ef7f283b937",
+  "screen": "P1114WM00",
+  "title": "PO Batch Monitoring",
+  "to": null
+}

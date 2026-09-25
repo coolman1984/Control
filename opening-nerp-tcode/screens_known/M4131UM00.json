@@ -1,0 +1,18 @@
+{
+  "division": {
+    "dataset": "dsCatCommonTreeNodeDVO",
+    "form": "OrgCategory_GDS"
+  },
+  "fingerprint": "19725479c806efb9",
+  "from": null,
+  "grid": {
+    "dataset": "dsM4131UM0001List",
+    "form": "",
+    "name": "grdMain"
+  },
+  "menuId": "MRM0094",
+  "opening_fingerprint": "19725479c806efb9",
+  "screen": "M4131UM00",
+  "title": "Calendar Auto Regi. Info.",
+  "to": null
+}

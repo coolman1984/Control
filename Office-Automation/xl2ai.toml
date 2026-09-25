@@ -1,0 +1,18 @@
+# Project configuration for THIS workspace (environment + which files to process).
+# The generic platform (xl2ai/) knows nothing about these files; this is the only place they are named.
+# Relative paths are relative to this file. On Windows use forward slashes or single-quoted paths.
+
+[project]
+name = "office-automation"
+data_dir = "data"
+
+[environment]
+# byte prefixes of rights-management wrappers around workbooks (only Excel can open such files)
+wrapper_prefixes = ["<## NASCA DRM"]
+
+[refresh]
+allow_partial = false   # a run with failed sheets is never promoted unless this is true
+keep_runs = 3
+
+[[sources]]
+path = "Price Comparison Data"      # a specimen used to stress-test the platform

@@ -1,0 +1,33 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet and test
+        run: |
+          go vet ./...
+          go test ./...
+      - name: Parse-check embedded PowerShell
+        shell: pwsh
+        run: |
+          $env:WINSIGHT_PWSH = (Get-Command powershell.exe).Source
+          go test ./internal/tools -run PowerShell -v
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w" -o dist/winsight.exe ./cmd/winsight
+      - name: Smoke test real Windows probes
+        shell: pwsh
+        run: |
+          foreach ($t in 'sysinfo','drives','junk','startup','services','memory','health','missing','path','tweaks','secrets','recover','shortcuts') {
+            .\dist\winsight.exe $t --json | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "$t failed" }
+          }
+          .\dist\winsight.exe doctor --md | Select-Object -First 40
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winsight
+          path: dist/winsight.exe

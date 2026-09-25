@@ -1,0 +1,17 @@
+{
+  "division": {
+    "dataset": "dsCatCommonTreeNodeDVO",
+    "form": "OrgCategory_GDS"
+  },
+  "fingerprint": "d60461f1979c724f",
+  "from": null,
+  "grid": {
+    "dataset": "dsM4151UM0005DVOList",
+    "form": "",
+    "name": "grdWorkCal"
+  },
+  "menuId": "MRM0095",
+  "screen": "M4151UM00",
+  "title": "Work Calendar",
+  "to": null
+}

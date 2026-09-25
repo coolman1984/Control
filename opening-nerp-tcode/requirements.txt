@@ -1,0 +1,3 @@
+# The only third-party dependency. Everything else is the Python stdlib.
+# Install with:  python -m pip install -r requirements.txt
+websocket-client>=1.6

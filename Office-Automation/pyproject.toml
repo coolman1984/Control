@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xl2ai"
+dynamic = ["version"]
+description = "Local Excel-to-SQLite preparation platform for safe, traceable AI analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+authors = [{name = "Office Automation"}]
+dependencies = [
+  "pywin32>=306; platform_system == 'Windows'"
+]
+
+[project.optional-dependencies]
+direct = ["python-calamine>=0.3"]           # the direct (no-Excel) extraction engine
+docs = ["python-docx>=1.1", "python-pptx>=0.6.23", "pdfplumber>=0.11", "olefile>=0.46"]   # Word, PowerPoint, PDF, .msg
+all = ["python-calamine>=0.3", "python-docx>=1.1", "python-pptx>=0.6.23", "pdfplumber>=0.11", "olefile>=0.46"]
+test = ["python-calamine>=0.3", "openpyxl>=3.1", "python-docx>=1.1", "python-pptx>=0.6.23", "pdfplumber>=0.11",
+        "olefile>=0.46", "reportlab>=4"]
+
+[project.scripts]
+xl2ai = "xl2ai.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "xl2ai.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["xl2ai*"]

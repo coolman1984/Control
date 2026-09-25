@@ -1,0 +1,5 @@
+/dist/
+/winsight
+/winsight.exe
+winsight-brief-*/
+*.test

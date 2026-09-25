@@ -1,0 +1,34 @@
+# Root-level ignores for the merged Control repo.
+# Each subfolder also keeps its own .gitignore (git honors both).
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+
+# Go
+/Performance/dist/
+/Performance/winsight
+/Performance/winsight.exe
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Leftover Claude Code worktrees (scratch git clones, not project content)
+.claude/worktrees/
+
+# hub app build/local artifacts
+/hub/.venv/
+/hub/bin/
+/hub/.pytest_cache/
+/hub/control_hub.egg-info/
