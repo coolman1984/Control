@@ -18,6 +18,8 @@ USAGE = """control - one front door for Windows apps, websites, G-MES, PC repair
   control vault list               names of the stored secrets (never their values)
   control vault delete <name>      remove a stored secret
   control dashboard [--port N]     serve a read-only local view of runs/triggers/journal
+  control tools verify             check the tool surface against the accepted baseline
+  control tools accept             accept the current tool surface as the new baseline
   control <area.verb> --help       one action, e.g. control sys.health
 """
 
@@ -85,6 +87,9 @@ def main(argv=None):
         if "--token" in rest and rest.index("--token") + 1 < len(rest):
             token = rest[rest.index("--token") + 1]
         return dashboard.run_forever(port=port, token=token)
+    if cmd == "tools":
+        from . import tools_lock
+        return tools_lock.main(rest)
     if cmd == "guide":
         from . import guide
         if "--write" in rest:

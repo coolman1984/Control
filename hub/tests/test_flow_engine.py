@@ -639,3 +639,61 @@ def test_secret_never_reaches_the_journal_even_under_a_plain_key_name(clean_regi
     assert run["status"] == "done"
     text = j.path.read_text(encoding="utf-8")
     assert "hunter2" not in text
+
+
+@pytest.fixture
+def fake_policy(tmp_path, monkeypatch):
+    from control import policy as policy_mod
+    original_load = policy_mod.load
+
+    monkeypatch.setattr(policy_mod, "load", lambda home=None: original_load(tmp_path))
+    return tmp_path
+
+
+def _write_policy(tmp_path, text):
+    (tmp_path / "policy.toml").write_text(text, encoding="utf-8")
+
+
+def test_policy_denies_an_action(clean_registry, store, fake_policy):
+    ran = []
+    add("win.shell", READ, lambda a: (ran.append(1) or {"ok": True}, "ran"))
+    _write_policy(fake_policy, '[defaults]\ndeny_actions = ["win.shell"]\n')
+    f = flow('name = "nightly"\n[[steps]]\nid="a"\ntype="action"\naction="win.shell"\n')
+    run = engine.run_flow(f, {}, store=store)
+    assert run["status"] == "failed" and "POLICY_DENIED" in run["error"]
+    assert ran == []
+
+
+def test_policy_allow_list_restricts_flow(clean_registry, store, fake_policy):
+    add("gmes.run", READ, lambda a: ({"ok": True}, "ok"))
+    add("win.click", READ, lambda a: ({"ok": True}, "ok"))
+    _write_policy(fake_policy, '[flows.nightly]\nallow_actions = ["gmes.*"]\n')
+    ok = flow('name = "nightly"\n[[steps]]\nid="a"\ntype="action"\naction="gmes.run"\n')
+    run = engine.run_flow(ok, {}, store=store)
+    assert run["status"] == "done"
+
+    blocked = flow('name = "nightly"\n[[steps]]\nid="a"\ntype="action"\naction="win.click"\n')
+    run2 = engine.run_flow(blocked, {}, store=store, run_id="r2")
+    assert run2["status"] == "failed" and "POLICY_NOT_ALLOWED" in run2["error"]
+
+
+def test_policy_rate_limit_stops_a_runaway_loop(clean_registry, store, fake_policy):
+    calls = []
+    add("win.click", READ, lambda a: (calls.append(1) or {"ok": True}, "ok"))
+    _write_policy(fake_policy, '[flows.f]\n[flows.f.max_calls]\n"win.click" = 2\n')
+    f = flow("""
+name = "f"
+[[steps]]
+id = "loop"
+type = "for_each"
+items = "{{ input.nums }}"
+[[steps.steps]]
+id = "click"
+type = "action"
+action = "win.click"
+""")
+    run = engine.run_flow(f, {"nums": [1, 2, 3]}, store=store)
+    assert run["status"] == "done"          # for_each doesn't stop_on_error by default
+    assert len(calls) == 2                  # the third item's click was refused by policy
+    loop_out = run["context"]["steps"]["loop"]
+    assert loop_out["succeeded"] == 2 and loop_out["failed"] == 1

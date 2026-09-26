@@ -21,12 +21,18 @@ Design choices (see docs/plans/2026-09-25-control-master-roadmap.md, piece 2):
   (`APPROVAL_UNAVAILABLE`) instead of letting injected content silently reach a risky action. v1
   scope: direct `action`/`parallel` step args only; a value that passes through `set` into `vars`,
   or through `if`'s `that`/`for_each`'s `items`, is not tracked as tainted.
+- Policy (piece 4, optional `<CONTROL_HOME>/policy.toml`, see `control/policy.py`): a second,
+  independent fence checked before every `action`/`parallel` call (never `wait_for` — it is
+  restricted to read-only actions and legitimately polls the same one many times, which no
+  `max_calls` setting should have to accommodate). Reloaded fresh on every call, not cached at run
+  start, so tightening it applies to a run already in flight.
 """
 import re
 import secrets
 import threading
 import time
 
+from .. import policy as policy_mod
 from .. import registry, runner, vault
 from ..errors import ControlError
 from . import expr
@@ -131,6 +137,14 @@ def _mark_if_untrusted(ctx, step_id, action_name):
         pass
 
 
+def _check_policy(ctx, action_name):
+    """policy.toml (piece 4): a second, independent fence a flow's own approval can't remove.
+    Reloaded fresh on every call rather than cached at run start, so the owner tightening it takes
+    effect on runs already in flight."""
+    policy_mod.check(policy_mod.load(), ctx.get("_flow_name", ""), action_name,
+                     ctx.setdefault("_policy_counts", {}))
+
+
 def _call(action_name, args, execute, pre_approved, force_secret_keys=()):
     try:
         action = registry.get(action_name)
@@ -154,6 +168,7 @@ def _dispatch(step, ctx, store, run_id, idx, execute, dry_run, pre_approved, res
                     "args": _fill_secrets(resolved, preview=True)}
         secret_keys = _secret_key_names(resolved)
         args = _fill_secrets(resolved, preview=False)
+        _check_policy(ctx, step.get("action"))
         tainted = _tainted_sources(raw_args, set(ctx.get("tainted", [])))
         payload, text = _call(step.get("action"), args, execute, pre_approved and not tainted,
                                force_secret_keys=secret_keys)
@@ -195,11 +210,14 @@ def _dispatch(step, ctx, store, run_id, idx, execute, dry_run, pre_approved, res
         for i, item in enumerate(items):
             loop_ctx = {"input": ctx["input"], "steps": dict(ctx["steps"]),
                         "vars": {**ctx["vars"], as_name: item, f"{as_name}_index": i},
-                        "tainted": list(ctx.get("tainted", []))}
+                        "tainted": list(ctx.get("tainted", [])),
+                        "_flow_name": ctx.get("_flow_name", ""),
+                        "_policy_counts": dict(ctx.get("_policy_counts", {}))}
             try:
                 _run_nested(step.steps, loop_ctx, store, run_id, f"{idx}.{i}", execute, dry_run, pre_approved, resolve_flow)
                 results.append({"index": i, "ok": True})
                 ctx["steps"].update(loop_ctx["steps"])
+                ctx.setdefault("_policy_counts", {}).update(loop_ctx.get("_policy_counts", {}))
                 for t_id in loop_ctx.get("tainted", []):
                     if t_id not in ctx.get("tainted", []):
                         ctx.setdefault("tainted", []).append(t_id)
@@ -221,6 +239,8 @@ def _dispatch(step, ctx, store, run_id, idx, execute, dry_run, pre_approved, res
         if dry_run:
             return {aid: {"ok": True, "_dry_run": True, "would_run": aname, "args": _fill_secrets(aargs, preview=True)}
                     for aid, aname, aargs in resolved}
+        for _, aname, _ in resolved:
+            _check_policy(ctx, aname)
         tainted_set = set(ctx.get("tainted", []))
         out, errs, any_untrusted = {}, [], False
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -341,6 +361,7 @@ def _execute_step(step, ctx, store, run_id, idx, execute, dry_run, pre_approved,
 def _advance(flow, run_id, store, execute, dry_run, resolve_flow, pre_approved=False, force_first=False, answer=None):
     run = store.get_run(run_id)
     ctx = run["context"]
+    ctx["_flow_name"] = flow.name
     start_idx = run["cursor"]
     idx = start_idx
     steps = flow.steps

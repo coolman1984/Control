@@ -156,6 +156,12 @@ def serve(preload=(), stdin=None, stdout=None, load=True):
     try:
         if load:
             areas.load_all()
+            from . import tools_lock
+            drifted = tools_lock.check()
+            if drifted is not None:
+                print(f"WARNING: the tool surface changed since it was last accepted (now {drifted[:12]}); "
+                      "run `control tools verify` for details, `control tools accept` once reviewed",
+                      file=sys.stderr)
         server = Server(preload=preload, out=out)
         for line in stdin:
             line = line.strip()

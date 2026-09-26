@@ -50,6 +50,18 @@ def set_area(name, ok, count=0, reason="", hint=""):
     AREAS[name] = {"ok": ok, "count": count, "reason": reason, "hint": hint}
 
 
+def surface_hash():
+    """A stable digest of the whole tool surface (name, help, schema, static tier) - piece 4's
+    tool-description integrity check (see control/tools_lock.py) hashes this across a restart to
+    notice a description or schema that changed without the owner reviewing it. A dynamic tier
+    (a function) can't be hashed meaningfully, so it contributes a constant instead of its code."""
+    import hashlib
+    import json as _json
+    rows = sorted((a.name, a.help, _json.dumps(a.schema, sort_keys=True, default=str),
+                  a.tier if isinstance(a.tier, str) else "dynamic") for a in ACTIONS.values())
+    return hashlib.sha256(_json.dumps(rows, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
 def get(name):
     try:
         return ACTIONS[name]

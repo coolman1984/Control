@@ -168,7 +168,7 @@ retry (mentioned in piece 2) is still open.
 - Debounce, concurrency limit per flow (`single`/`queue`/`parallel:N`), and a global "one UI flow at a time" lock (two flows cannot both drive the mouse).
 - **Done means**: dropping an Excel file into a watched folder starts exactly one run; reboot-while-scheduled catches up per policy.
 
-### 2.4 Piece 4 — Vault, policy and the guard 🔴 ✅ core built (2026-09-25): vault, taint, kill switch
+### 2.4 Piece 4 — Vault, policy and the guard 🔴 ✅ done (2026-09-26): vault, taint, policy, tool-lock, kill switch
 
 - **Vault** ✅: `control/vault.py`, the same DPAPI mechanism as `gmes_credentials.py`
   (`CryptProtectData`/`CryptUnprotectData`, current user, plus an app-specific entropy salt),
@@ -194,14 +194,30 @@ retry (mentioned in piece 2) is still open.
   tracked. Tests: the `test_untrusted_*` cases in `test_flow_engine.py`.
 - **Kill switch** ✅ (software half): `agent.stop_all` cancels every running/waiting run at once.
   A physical hotkey/tray button is piece 8 (dashboard) territory - this is the action it would call.
-- **Policy file** (`policy.toml`: per-flow allowlists, argument bounds, rate limits, business
-  hours) — not built. **Tool-description integrity** (hash the served tool list, refuse a runtime
-  change) — not built. **UI-chain bypass budget** from piece 1 — still open.
+- **Policy file** ✅ (`control/policy.py`, optional `<CONTROL_HOME>/policy.toml`): per-flow
+  `allow_actions`/`deny_actions` (glob, `defaults.deny_actions` is a floor no flow's own policy can
+  remove) and `max_calls` (a per-run, per-action-name rate limit — `"win.*" = 3` means each action
+  matching that glob may run up to 3 times, not 3 combined). Checked on every real `action`/
+  `parallel` call, reloaded fresh each time (not cached at run start), deliberately **not** applied
+  to `wait_for` (it polls one read-only action many times by design; no rate limit should have to
+  accommodate that). Argument bounds and business hours from the original sketch are not built.
+  Tests: `test_policy.py`, plus the `test_policy_*` cases in `test_flow_engine.py`.
+- **Tool-description integrity** ✅, rescoped: `registry.register()` already raises on a duplicate
+  action name, so nothing already running can silently redefine a tool an agent has seen — the
+  real gap was a *restart* after a tampered or unexpectedly-edited area module. `registry.
+  surface_hash()` + `control/tools_lock.py` hash the whole served surface (name, description,
+  schema, static tier); `control tools verify`/`control tools accept` are the review-and-pin step
+  (CLI-only, same reasoning as `vault.set` — an agent must not be able to wave through a change to
+  its own tool descriptions), and `control mcp` runs the check itself at startup, warning (never
+  blocking, so a legitimate upgrade doesn't get bricked) if the surface drifted since it was last
+  accepted. Tests: `test_tools_lock.py`.
+- **UI-chain bypass budget** from piece 1 — still open (needs real `win.*` sequencing to reason
+  about meaningfully; piece 6 territory).
 - **Dry-run** was already delivered in piece 2 (`flow.dry_run`).
 - **Done means, revisited**: the piece's own red-team scenario — an injected page asks the agent to
-  run a risky action — is covered exactly as described above for an *approved, unattended* flow;
-  `agent.stop_all` is well under 1s (it is a single SQLite pass, no polling); the secret-never-in-
-  logs property is tested directly. Policy file and tool-description integrity remain open.
+  run a risky action — is covered for an *approved, unattended* flow; `agent.stop_all` is well
+  under 1s (a single SQLite pass, no polling); the secret-never-in-logs property is tested
+  directly; a flow's action surface can now also be capped by policy.toml independently of tiers.
 
 ### 2.5 Piece 5 — General web engine 🟠 (was "piece 2" in the hub spec)
 

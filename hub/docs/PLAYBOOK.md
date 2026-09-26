@@ -170,6 +170,29 @@ fails closed (`APPROVAL_UNAVAILABLE`) instead of quietly obeying instructions hi
 or e-mail. This only guards *risky* steps built directly from a tainted step's output right now —
 not a value that passed through a `set` step's `vars`, or through `if`/`for_each`'s own condition.
 
+## Policy: a second fence a flow's own approval can't remove
+`<CONTROL_HOME>/policy.toml` (optional; nothing is restricted without it) can deny or allow-list
+actions per flow, and cap how many times a run may call a given action:
+```toml
+[defaults]
+deny_actions = ["win.shell"]              # applies to every flow, no flow's own policy overrides it
+
+[flows.nightly-report]
+allow_actions = ["gmes.*", "data.*"]      # if given, only these may run in this flow
+[flows.nightly-report.max_calls]
+"win.click" = 200                         # this run may call win.click at most 200 times
+```
+Checked on every `action`/`parallel` step (not `wait_for`, which legitimately polls the same
+read-only action many times). Reloaded fresh each call, so tightening it applies immediately, even
+to a run already going.
+
+## Tool-surface integrity
+`control tools verify` checks the exact set of actions, their descriptions and schemas against
+what was last accepted; `control tools accept` moves the accepted baseline forward after you've
+looked at what changed. `control mcp` runs this check itself at startup and prints a warning
+(never blocks) if the surface drifted since it was last accepted — worth a look before trusting a
+session where that fires, in case an area's code changed underneath you.
+
 ## The kill switch
 `agent.stop_all` cancels every running or waiting run immediately — already-completed steps are
 not undone, but nothing further happens. Use it if a flow is clearly doing the wrong thing; there
