@@ -227,15 +227,50 @@ retry (mentioned in piece 2) is still open.
 - **Wait-for-condition primitives**: element state, text appears, file exists, window idle/CPU quiet, network idle.
 - **Locked-screen reality**: SendInput and screenshots fail on a locked session. Provide (a) dedicated automation VM/PC with auto-logon + screen lock disabled, or (b) "RDP-to-self keeps session alive" pattern; `control doctor` reports which is available. Tree-only (UIA pattern) actions preferred because they work on covered windows.
 
-### 2.8 Piece 8 — Dashboard, notifications, human-in-the-loop 🟡
+### 2.8 Piece 8 — Dashboard, notifications, human-in-the-loop 🟡 ▶ MVP built (2026-09-26): read-only dashboard
 
-- **Local dashboard** (`127.0.0.1`, token): runs, step timeline with masked screenshots, errors with hints, queue items, triggers, pending approvals, "time saved" per flow, success-rate trend, flow editor (text first, visual view later).
+`control/dashboard.py` + `control dashboard`: `127.0.0.1`-only, a token in the URL (random unless
+the owner sets one), stdlib `http.server` only — a single dependency-free page listing recent runs,
+every flow's trigger and next-due state, and the journal, refreshed via three small JSON endpoints
+(`/api/runs`, `/api/runs/<id>`, `/api/triggers`, `/api/journal`). Tested both as pure functions
+(`api_runs`/`api_run`/`api_journal`/`api_triggers`, no server needed) and end-to-end against a real
+`ThreadingHTTPServer` on an OS-assigned port. Deliberately **read-only** for this slice: approving,
+resuming or cancelling a run from a web page is a bigger security decision (what else on this PC
+can reach `127.0.0.1`?) than a first dashboard needs to take on — still open, along with the rest
+of this piece:
+
+- **Local dashboard** (`127.0.0.1`, token): step timeline with masked screenshots, errors with hints, queue items, pending approvals, "time saved" per flow, success-rate trend, flow editor (text first, visual view later), and write actions (approve/resume/cancel) once the security model for those is worked out.
 - **Tray app**: status, pause/kill, recent runs, approve/deny.
 - **Notifications**: Windows toast; optional e-mail digest; optional phone channel (only if owner approves, and never for approving risky steps unless explicitly enabled with a second factor).
 - **`ask_human` step**: form (fields + validation) pops on screen or dashboard; run waits durably (hours/days) and resumes with the answer.
 - **Daily/weekly report**: what ran, failures, what needs attention, disk/health from WinSight.
 
-### 2.9 Piece 9 — Learning and discovery 🟢
+### 2.9 Piece 9 — Learning and discovery 🟢 ▶ "Record → flow" and an audit trail built (2026-09-26)
+
+New `record.*` area (`control/areas/record.py`) wraps wad's own recorder (`wadlib/record.py` -
+unchanged, per the piece-1 rule) as a background child (the same reason `gmes.*` is a subprocess
+adapter: `wad record` blocks the calling process until stopped). Two things layered on top that
+wad alone doesn't give you:
+
+- **`record.audit`**: a plain-language, step-by-step report of a recorded session — "what did
+  this person do", for compliance, handover, or documenting a process that has never been written
+  down. Groups steps by window, never shows a recorded password (wad already redacts a password
+  field's keystrokes to a placeholder at capture time; `record.audit` renders that placeholder as
+  `(password, not shown)` rather than surfacing it).
+- **`record.to_flow`**: the roadmap's original "Record → flow" idea, now concrete because piece 2's
+  flow engine exists to run what it writes. Maps each recorded step (`click`/`type`/`select`/
+  `press`/…) to the matching `win.*` action, one-for-one, and turns wad's own password placeholder
+  into `{{ secret:name }}` — the owner runs `control vault set` before the draft's first real run.
+  Writes a **draft** flow file; nothing runs on its own. `flow.validate`/`flow.describe`/
+  `flow.approve` are still the owner's own next steps, deliberately — a recording is a starting
+  point, not a flow to trust blindly (it has no `if`/retry/error handling of its own; a person
+  reviewing it adds those where the task needs them).
+
+Tested with a fake `wad.py` subprocess (`tests/fakes/wad/`, the same real-subprocess-against-a-
+fake-script pattern `gmes.*`'s tests already use) plus a pure, I/O-free test of the step→TOML
+conversion itself. Not built from this slice: wad's `trace --export`/object-repository integration
+(depends on piece 7), and task mining from journal history (below) — this is "one recording, one
+flow", not yet "notice the pattern across many".
 
 - **Record → flow**: wad `record` + `trace --export` converted into a YAML flow with object-repository targets, then validated by `flow.dry_run`.
 - **Describe → flow**: Claude drafts a flow from a sentence using `control.find_action` + templates; must pass `flow.validate` and a dry run before approval.

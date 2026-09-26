@@ -17,6 +17,7 @@ USAGE = """control - one front door for Windows apps, websites, G-MES, PC repair
   control vault set <name>         store a secret for {{ secret:name }} (typed here, never over MCP)
   control vault list               names of the stored secrets (never their values)
   control vault delete <name>      remove a stored secret
+  control dashboard [--port N]     serve a read-only local view of runs/triggers/journal
   control <area.verb> --help       one action, e.g. control sys.health
 """
 
@@ -75,6 +76,15 @@ def main(argv=None):
         if "--interval" in rest and rest.index("--interval") + 1 < len(rest):
             interval = float(rest[rest.index("--interval") + 1])
         return agent.run_forever(interval_s=interval)
+    if cmd == "dashboard":
+        from . import dashboard
+        port = 8765
+        if "--port" in rest and rest.index("--port") + 1 < len(rest):
+            port = int(rest[rest.index("--port") + 1])
+        token = None
+        if "--token" in rest and rest.index("--token") + 1 < len(rest):
+            token = rest[rest.index("--token") + 1]
+        return dashboard.run_forever(port=port, token=token)
     if cmd == "guide":
         from . import guide
         if "--write" in rest:

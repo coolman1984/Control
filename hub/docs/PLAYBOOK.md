@@ -175,6 +175,26 @@ not a value that passed through a `set` step's `vars`, or through `if`/`for_each
 not undone, but nothing further happens. Use it if a flow is clearly doing the wrong thing; there
 is no need to find its run id first.
 
+## Recording: turning a person's own hands into a flow (and an audit trail)
+`record.start` (optionally `task="..."`, `window="..."`) starts wad's own recorder in the
+background - the person does the task once, by hand; `record.stop` saves it as a session. From a
+session:
+- `record.audit {session_id}` writes and returns a plain-language, step-by-step report ("what did
+  this person do") - for compliance, handover, or just documenting a process. A recorded password
+  is never shown, even here (`(password, not shown)`).
+- `record.to_flow {session_id, name}` writes a **draft** flow at `flows/<name>.toml` with one
+  `action` step per recorded step. Run `flow.validate` on it, read it with `flow.describe`, then
+  `flow.approve` once it looks right — a recorded step is a starting point, not something to trust
+  blindly. A recorded password becomes `{{ secret:recorded_password }}`; `control vault set
+  recorded_password` before the flow's first real run.
+`record.list`/`record.status` show past/current sessions. Only one recording runs at a time.
+
+## The dashboard
+`control dashboard` serves a read-only local page (`127.0.0.1` only, a token in the URL) showing
+recent runs, every flow's triggers, and the journal — useful to glance at without going through
+`run.list`/`agent.status`/`control.journal` one at a time. It cannot approve, resume, or cancel
+anything yet (piece 8 is not finished): use the actions for that.
+
 ## Details per tool
 The four tools keep their own docs: `I:\Control\win-agent-desktop\docs\COMMANDS.md`,
 `I:\Control\Office-Automation\AI_USAGE.md`, `I:\Control\opening-nerp-tcode\GMES_SKILL.md`,

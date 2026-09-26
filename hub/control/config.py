@@ -11,6 +11,7 @@ ROOT = HUB.parent
 DEFAULTS = {
     "gmes_dir": str(ROOT / "opening-nerp-tcode"),
     "gmes_python": sys.executable,
+    "wad_dir": str(ROOT / "win-agent-desktop"),
     "winsight_exe": str(HUB / "bin" / "winsight.exe"),
     "data_workspace": None,
     "timeouts": {"gmes": 1800, "sys": 300, "sys_fix": 900, "startup": 15},

@@ -52,6 +52,16 @@ def run(cmd, *, cwd=None, timeout):
     return p.returncode, out, err
 
 
+def start_background(cmd, *, cwd=None):
+    """Launch a child that is meant to keep running until something else stops it (wad's own
+    `record`, which blocks until `record-stop` touches its stop file) - unlike `run`, this never
+    waits for it to exit."""
+    return subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, env=child_env(), text=True, encoding="utf-8",
+                            errors="replace", creationflags=_NO_WINDOW,
+                            start_new_session=(sys.platform != "win32"))
+
+
 class McpChild:
     """One long-lived MCP server child, restarted on demand after a crash or timeout."""
 

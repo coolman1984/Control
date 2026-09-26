@@ -175,6 +175,26 @@ not a value that passed through a `set` step's `vars`, or through `if`/`for_each
 not undone, but nothing further happens. Use it if a flow is clearly doing the wrong thing; there
 is no need to find its run id first.
 
+## Recording: turning a person's own hands into a flow (and an audit trail)
+`record.start` (optionally `task="..."`, `window="..."`) starts wad's own recorder in the
+background - the person does the task once, by hand; `record.stop` saves it as a session. From a
+session:
+- `record.audit {session_id}` writes and returns a plain-language, step-by-step report ("what did
+  this person do") - for compliance, handover, or just documenting a process. A recorded password
+  is never shown, even here (`(password, not shown)`).
+- `record.to_flow {session_id, name}` writes a **draft** flow at `flows/<name>.toml` with one
+  `action` step per recorded step. Run `flow.validate` on it, read it with `flow.describe`, then
+  `flow.approve` once it looks right — a recorded step is a starting point, not something to trust
+  blindly. A recorded password becomes `{{ secret:recorded_password }}`; `control vault set
+  recorded_password` before the flow's first real run.
+`record.list`/`record.status` show past/current sessions. Only one recording runs at a time.
+
+## The dashboard
+`control dashboard` serves a read-only local page (`127.0.0.1` only, a token in the URL) showing
+recent runs, every flow's triggers, and the journal — useful to glance at without going through
+`run.list`/`agent.status`/`control.journal` one at a time. It cannot approve, resume, or cancel
+anything yet (piece 8 is not finished): use the actions for that.
+
 ## Details per tool
 The four tools keep their own docs: `I:\Control\win-agent-desktop\docs\COMMANDS.md`,
 `I:\Control\Office-Automation\AI_USAGE.md`, `I:\Control\opening-nerp-tcode\GMES_SKILL.md`,
@@ -229,6 +249,17 @@ _Unavailable on this PC: ModuleNotFoundError: No module named 'xl2ai'_
 | `gmes.describe` | read | What a G-MES screen needs (filters, dates, grids) before running it. |
 | `gmes.find` | read | Search the 809 G-MES screens by code or words. |
 | `gmes.run` | depends | Sign in, open the screens, set filters, run, verify the rows match, save Excel. |
+
+### record
+
+| Action | Tier | What it does |
+|---|---|---|
+| `record.audit` | safe | A plain-language, step-by-step report of one recorded session (for compliance, handover, or documenting how a task is done). Never shows a recorded password. |
+| `record.list` | read | Every saved recording session. |
+| `record.start` | safe | Start recording a person's clicks/typing/keys as a background wad session - stop with record.stop. Only one recording at a time. |
+| `record.status` | read | Whether a recording is active right now. |
+| `record.stop` | safe | Stop the active recording and save it as a session. |
+| `record.to_flow` | safe | Turn a recorded session into a draft flow (control/flow) ready for flow.validate and flow.approve. A recorded password becomes {{ secret:name }}. |
 
 ### run
 
